@@ -47,16 +47,13 @@ def fix_python_indentation(code):
 with st.sidebar:
     st.header("Settings")
 
-    model_path = st.text_input(
-        "Model Path",
-        value=r"E:\ahmed\AI\code_gen\pythonProject1\kaggle\working\codet5-finetuned\checkpoint-3141",
-        help="Path to your fine-tuned model"
-    )
+    # Fixed model path (removed text field)
+    model_path = r"\kaggle\working\codet5-finetuned\checkpoint-3141"
 
     max_length = st.slider("Max Length", 100, 1000, 250, 50)
     num_beams = st.slider("Number of Beams", 1, 10, 5, 1)
 
-    # Auto load model (removed button)
+    # Auto load model
     if not st.session_state.model_loaded:
         try:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
