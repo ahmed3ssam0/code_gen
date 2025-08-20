@@ -48,7 +48,7 @@ with st.sidebar:
     st.header("Settings")
 
     # Fixed model path (removed text field)
-    model_path = "/model"
+    model_path = "model"
 
     max_length = st.slider("Max Length", 100, 1000, 250, 50)
     num_beams = st.slider("Number of Beams", 1, 10, 5, 1)
