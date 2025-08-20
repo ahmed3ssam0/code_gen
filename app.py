@@ -56,7 +56,8 @@ with st.sidebar:
     max_length = st.slider("Max Length", 100, 1000, 250, 50)
     num_beams = st.slider("Number of Beams", 1, 10, 5, 1)
 
-    if st.button("Load Model"):
+    # Auto load model (removed button)
+    if not st.session_state.model_loaded:
         try:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             tokenizer = RobertaTokenizer.from_pretrained('Salesforce/codet5-small')
@@ -149,4 +150,4 @@ if st.button("Generate Code") and st.session_state.model_loaded:
             except Exception as e:
                 st.error(f"Error generating code: {str(e)}")
 elif not st.session_state.model_loaded:
-    st.info("Please load the model first using the sidebar options")
+    st.info("Please wait, model is loading...")
