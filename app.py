@@ -67,16 +67,19 @@ with st.sidebar:
         try:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             tokenizer = RobertaTokenizer.from_pretrained('Salesforce/codet5-small')
-
-            # Load model with proper handling
+    
+            # Load model with safe handling for meta tensors
             model = T5ForConditionalGeneration.from_pretrained(
                 model_path,
-                low_cpu_mem_usage=True
+                low_cpu_mem_usage=True,
+                device_map="auto" if torch.cuda.is_available() else None,
+                torch_dtype=torch.float32
             )
-
-            # Move to correct device
-            model = model.to(device)
-
+    
+            # If not using CUDA, move to CPU manually
+            if device.type == "cpu":
+                model = model.to("cpu")
+    
             st.session_state.model = model
             st.session_state.tokenizer = tokenizer
             st.session_state.device = device
