@@ -25,29 +25,20 @@ def fix_python_indentation(code):
     for line in lines:
         stripped = line.strip()
         if not stripped:
-            fixed_lines.append("")  # keep empty lines
             continue
 
-        # Handle block starters
+        # Handle indentation
         if stripped.startswith(('def ', 'class ', 'if ', 'for ', 'while ', 'else:', 'elif ')):
             fixed_line = ('    ' * indent_level) + stripped
-            fixed_lines.append(fixed_line)
             if stripped.endswith(':'):
                 indent_level += 1
-        elif stripped.startswith(('return', 'break', 'continue', 'pass')):
+        elif stripped.startswith(('return ', 'break', 'continue', 'pass')):
+            indent_level = max(0, indent_level - 1)
             fixed_line = ('    ' * indent_level) + stripped
-            fixed_lines.append(fixed_line)
         else:
             fixed_line = ('    ' * indent_level) + stripped
-            fixed_lines.append(fixed_line)
 
-            # If line ends with ":" but wasn't caught above (e.g. try:, except:)
-            if stripped.endswith(':'):
-                indent_level += 1
-
-        # Adjust indent after return/break/etc.
-        if stripped in ('return', 'break', 'continue', 'pass'):
-            indent_level = max(0, indent_level - 1)
+        fixed_lines.append(fixed_line)
 
     return '\n'.join(fixed_lines)
 
@@ -56,7 +47,7 @@ def fix_python_indentation(code):
 with st.sidebar:
     st.header("Settings")
 
-    # Fixed model path
+    # Fixed model path (removed text field)
     model_path = "model"
 
     max_length = st.slider("Max Length", 100, 1000, 250, 50)
@@ -67,19 +58,8 @@ with st.sidebar:
         try:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             tokenizer = RobertaTokenizer.from_pretrained('Salesforce/codet5-small')
-    
-            # Load model with safe handling for meta tensors
-            model = T5ForConditionalGeneration.from_pretrained(
-                model_path,
-                low_cpu_mem_usage=True,
-                device_map="auto" if torch.cuda.is_available() else None,
-                torch_dtype=torch.float32
-            )
-    
-            # If not using CUDA, move to CPU manually
-            if device.type == "cpu":
-                model = model.to("cpu")
-    
+            model = T5ForConditionalGeneration.from_pretrained(model_path).to(device)
+
             st.session_state.model = model
             st.session_state.tokenizer = tokenizer
             st.session_state.device = device
