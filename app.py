@@ -70,7 +70,7 @@ with st.sidebar:
                 model = model.to_empty(device=device)
                 # Reload the state dict to fill the model with actual weights
                 model.load_state_dict(
-                    torch.load(os.path.join(model_path, 'pytorch_model.bin'), 
+                    torch.load(os.path.join(model_path, 'model.safetensors'), 
                               map_location=device, 
                               weights_only=True)
                 )
