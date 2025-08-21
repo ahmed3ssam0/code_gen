@@ -1,8 +1,10 @@
 import streamlit as st
 import torch
 from transformers import RobertaTokenizer, T5ForConditionalGeneration
-import re
-import os
+from transformers.utils import logging
+
+# Set logging level to reduce verbosity
+logging.set_verbosity_error()
 
 # Set page config
 st.set_page_config(page_title="CodeT5 Code Generator", page_icon="🐍")
@@ -14,6 +16,10 @@ st.write("Generate Python code using a fine-tuned CodeT5 model")
 # Initialize session state
 if 'model_loaded' not in st.session_state:
     st.session_state.model_loaded = False
+if 'model' not in st.session_state:
+    st.session_state.model = None
+if 'tokenizer' not in st.session_state:
+    st.session_state.tokenizer = None
 
 # Function to fix Python indentation
 def fix_python_indentation(code):
@@ -79,18 +85,27 @@ with st.sidebar:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             st.write(f"Using device: {device}")
             
-            # Load tokenizer from the model directory
-            tokenizer = RobertaTokenizer.from_pretrained(model_path)
+            # Clear any previous model from memory
+            if st.session_state.model is not None:
+                del st.session_state.model
+                torch.cuda.empty_cache()
             
-            # Load model with safe tensors
-            model = T5ForConditionalGeneration.from_pretrained(
-                model_path,
-                torch_dtype=torch.float32,
-                use_safetensors=True
-            ).to(device)
+            # Load tokenizer and model
+            with st.spinner("Loading tokenizer..."):
+                tokenizer = RobertaTokenizer.from_pretrained(model_path)
             
-            # Set model to evaluation mode
-            model.eval()
+            with st.spinner("Loading model..."):
+                model = T5ForConditionalGeneration.from_pretrained(
+                    model_path,
+                    torch_dtype=torch.float32,
+                    use_safetensors=True,
+                    device_map="auto" if torch.cuda.is_available() else None
+                )
+                
+                if not torch.cuda.is_available():
+                    model = model.to(device)
+                
+                model.eval()
 
             st.session_state.model = model
             st.session_state.tokenizer = tokenizer
@@ -103,7 +118,7 @@ with st.sidebar:
             Common issues:
             1. Make sure the model path is correct
             2. Check if all model files are present
-            3. Try updating transformers: pip install --upgrade transformers
+            3. Try restarting the application
             """)
 
 # Main input section
@@ -120,8 +135,10 @@ input_data = st.text_input(
     placeholder="Optional input data"
 )
 
-if st.button("Generate Code") and st.session_state.model_loaded:
-    if not instruction:
+if st.button("Generate Code"):
+    if not st.session_state.model_loaded:
+        st.error("Please load the model first using the sidebar options")
+    elif not instruction:
         st.warning("Please provide an instruction")
     else:
         # Format the prompt
@@ -156,14 +173,15 @@ if st.button("Generate Code") and st.session_state.model_loaded:
                     max_length=512
                 ).to(st.session_state.device)
 
-                outputs = st.session_state.model.generate(
-                    **inputs,
-                    max_length=max_length,
-                    num_beams=num_beams,
-                    temperature=temperature,
-                    early_stopping=True,
-                    do_sample=True
-                )
+                with torch.no_grad():
+                    outputs = st.session_state.model.generate(
+                        **inputs,
+                        max_length=max_length,
+                        num_beams=num_beams,
+                        temperature=temperature,
+                        early_stopping=True,
+                        do_sample=True
+                    )
 
                 predicted_code = st.session_state.tokenizer.decode(
                     outputs[0],
@@ -191,5 +209,3 @@ if st.button("Generate Code") and st.session_state.model_loaded:
 
             except Exception as e:
                 st.error(f"Error generating code: {str(e)}")
-elif not st.session_state.model_loaded:
-    st.info("Please load the model first using the sidebar options")
