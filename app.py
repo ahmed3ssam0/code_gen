@@ -20,19 +20,38 @@ def fix_python_indentation(code):
     lines = code.split('\n')
     fixed_lines = []
     indent_level = 0
+    in_multiline_string = False
+    string_delimiter = None
 
     for line in lines:
         stripped = line.strip()
         if not stripped:
+            fixed_lines.append('')
+            continue
+            
+        # Handle multiline strings
+        if in_multiline_string:
+            fixed_lines.append(('    ' * indent_level) + line)
+            if string_delimiter in line:
+                in_multiline_string = False
+            continue
+        elif any(stripped.startswith(delimiter) for delimiter in ['"""', "'''", 'r"""', "r'''"]):
+            in_multiline_string = True
+            string_delimiter = stripped[:3] if stripped.startswith('r') else stripped[:3]
+            fixed_lines.append(('    ' * indent_level) + line)
             continue
 
-        # Handle indentation
-        if stripped.startswith(('def ', 'class ', 'if ', 'for ', 'while ', 'else:', 'elif ')):
+        # Handle indentation for code blocks
+        if stripped.startswith(('def ', 'class ', 'if ', 'for ', 'while ', 'try:', 'with ')):
             fixed_line = ('    ' * indent_level) + stripped
-            if stripped.endswith(':'):
+            if stripped.endswith(':') and not stripped.startswith(('"""', "'''")):
                 indent_level += 1
-        elif stripped.startswith(('return ', 'break', 'continue', 'pass')):
+        elif stripped.startswith(('elif ', 'else:', 'except ', 'finally:')):
             indent_level = max(0, indent_level - 1)
+            fixed_line = ('    ' * indent_level) + stripped
+            if stripped.endswith(':') and not stripped.startswith(('"""', "'''")):
+                indent_level += 1
+        elif stripped.startswith(('return ', 'break', 'continue', 'pass', 'raise ', 'yield ')):
             fixed_line = ('    ' * indent_level) + stripped
         else:
             fixed_line = ('    ' * indent_level) + stripped
@@ -47,34 +66,31 @@ with st.sidebar:
 
     model_path = st.text_input(
         "Model Path",
-        value=r"model",
+        value="model",
         help="Path to your fine-tuned model"
     )
 
     max_length = st.slider("Max Length", 100, 1000, 250, 50)
     num_beams = st.slider("Number of Beams", 1, 10, 5, 1)
+    temperature = st.slider("Temperature", 0.1, 2.0, 1.0, 0.1)
 
     if st.button("Load Model"):
         try:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            st.write(f"Using device: {device}")
             
-            # Try loading tokenizer from the model directory first, fall back to default
-            try:
-                tokenizer = RobertaTokenizer.from_pretrained(model_path)
-            except:
-                tokenizer = RobertaTokenizer.from_pretrained('Salesforce/codet5-small')
-                st.info("Using default tokenizer as custom tokenizer not found")
+            # Load tokenizer from the model directory
+            tokenizer = RobertaTokenizer.from_pretrained(model_path)
             
-            # Load model with explicit device mapping
+            # Load model with safe tensors
             model = T5ForConditionalGeneration.from_pretrained(
-                model_path, 
+                model_path,
                 torch_dtype=torch.float32,
-                device_map="auto" if torch.cuda.is_available() else None
-            )
+                use_safetensors=True
+            ).to(device)
             
-            # If not using device_map, manually move to device
-            if not torch.cuda.is_available():
-                model = model.to(device)
+            # Set model to evaluation mode
+            model.eval()
 
             st.session_state.model = model
             st.session_state.tokenizer = tokenizer
@@ -83,7 +99,12 @@ with st.sidebar:
             st.success("Model loaded successfully!")
         except Exception as e:
             st.error(f"Error loading model: {str(e)}")
-            st.info("Make sure the model path is correct and the model files are properly formatted")
+            st.info("""
+            Common issues:
+            1. Make sure the model path is correct
+            2. Check if all model files are present
+            3. Try updating transformers: pip install --upgrade transformers
+            """)
 
 # Main input section
 st.header("Describe Your Code")
@@ -113,7 +134,7 @@ if st.button("Generate Code") and st.session_state.model_loaded:
 ### Input:
 {input_data}
 
-### Output:
+### Response:
 """
         else:
             prompt = f"""Below is an instruction that describes a task. Write a response that appropriately completes the request.
@@ -121,7 +142,7 @@ if st.button("Generate Code") and st.session_state.model_loaded:
 ### Instruction:
 {instruction}
 
-### Output:
+### Response:
 """
 
         # Generate code
@@ -139,7 +160,9 @@ if st.button("Generate Code") and st.session_state.model_loaded:
                     **inputs,
                     max_length=max_length,
                     num_beams=num_beams,
-                    early_stopping=True
+                    temperature=temperature,
+                    early_stopping=True,
+                    do_sample=True
                 )
 
                 predicted_code = st.session_state.tokenizer.decode(
@@ -147,9 +170,9 @@ if st.button("Generate Code") and st.session_state.model_loaded:
                     skip_special_tokens=True
                 )
 
-                # Extract only the code after "### Output:"
-                if "### Output:" in predicted_code:
-                    predicted_code = predicted_code.split("### Output:")[1].strip()
+                # Extract only the code after "### Response:"
+                if "### Response:" in predicted_code:
+                    predicted_code = predicted_code.split("### Response:")[1].strip()
 
                 # Fix indentation
                 fixed_code = fix_python_indentation(predicted_code)
