@@ -15,7 +15,6 @@ st.write("Generate Python code using a fine-tuned CodeT5 model")
 if 'model_loaded' not in st.session_state:
     st.session_state.model_loaded = False
 
-
 # Function to fix Python indentation
 def fix_python_indentation(code):
     lines = code.split('\n')
@@ -42,7 +41,6 @@ def fix_python_indentation(code):
 
     return '\n'.join(fixed_lines)
 
-
 # Sidebar for settings
 with st.sidebar:
     st.header("Settings")
@@ -59,8 +57,24 @@ with st.sidebar:
     if st.button("Load Model"):
         try:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            tokenizer = RobertaTokenizer.from_pretrained('Salesforce/codet5-small')
-            model = T5ForConditionalGeneration.from_pretrained(model_path).to(device)
+            
+            # Try loading tokenizer from the model directory first, fall back to default
+            try:
+                tokenizer = RobertaTokenizer.from_pretrained(model_path)
+            except:
+                tokenizer = RobertaTokenizer.from_pretrained('Salesforce/codet5-small')
+                st.info("Using default tokenizer as custom tokenizer not found")
+            
+            # Load model with explicit device mapping
+            model = T5ForConditionalGeneration.from_pretrained(
+                model_path, 
+                torch_dtype=torch.float32,
+                device_map="auto" if torch.cuda.is_available() else None
+            )
+            
+            # If not using device_map, manually move to device
+            if not torch.cuda.is_available():
+                model = model.to(device)
 
             st.session_state.model = model
             st.session_state.tokenizer = tokenizer
@@ -69,6 +83,7 @@ with st.sidebar:
             st.success("Model loaded successfully!")
         except Exception as e:
             st.error(f"Error loading model: {str(e)}")
+            st.info("Make sure the model path is correct and the model files are properly formatted")
 
 # Main input section
 st.header("Describe Your Code")
@@ -116,7 +131,8 @@ if st.button("Generate Code") and st.session_state.model_loaded:
                     prompt,
                     return_tensors='pt',
                     padding=True,
-                    truncation=True
+                    truncation=True,
+                    max_length=512
                 ).to(st.session_state.device)
 
                 outputs = st.session_state.model.generate(
@@ -130,6 +146,10 @@ if st.button("Generate Code") and st.session_state.model_loaded:
                     outputs[0],
                     skip_special_tokens=True
                 )
+
+                # Extract only the code after "### Output:"
+                if "### Output:" in predicted_code:
+                    predicted_code = predicted_code.split("### Output:")[1].strip()
 
                 # Fix indentation
                 fixed_code = fix_python_indentation(predicted_code)
