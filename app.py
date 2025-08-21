@@ -69,6 +69,7 @@ with st.sidebar:
                 # Create a new model with empty weights on the target device
                 model = T5ForConditionalGeneration.from_pretrained(
                     model_path, 
+                    low_cpu_mem_usage=True
                     device_map="auto" if device.type == "cuda" else None,
                     torch_dtype=torch.float32
                 )
