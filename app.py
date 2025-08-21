@@ -58,8 +58,25 @@ with st.sidebar:
         try:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             tokenizer = RobertaTokenizer.from_pretrained('Salesforce/codet5-small')
-            model = T5ForConditionalGeneration.from_pretrained(model_path, low_cpu_mem_usage=True).to(device)
-
+            
+            # Load model with proper handling for meta tensors
+            model = T5ForConditionalGeneration.from_pretrained(model_path)
+            
+            # Check if model has meta tensors and needs special handling
+            has_meta_params = any(param.is_meta for param in model.parameters())
+            
+            if has_meta_params:
+                # Move model from meta device to the target device properly
+                model = model.to_empty(device=device)
+                # Reload the state dict to fill the model with actual weights
+                model.load_state_dict(
+                    torch.load(os.path.join(model_path, 'pytorch_model.bin'), 
+                              map_location=device, 
+                              weights_only=True)
+                )
+            else:
+                model = model.to(device)
+                
             st.session_state.model = model
             st.session_state.tokenizer = tokenizer
             st.session_state.device = device
@@ -114,7 +131,8 @@ if st.button("Generate Code") and st.session_state.model_loaded:
                     prompt,
                     return_tensors='pt',
                     padding=True,
-                    truncation=True
+                    truncation=True,
+                    max_length=512  # Added max_length to avoid tokenization issues
                 ).to(st.session_state.device)
 
                 outputs = st.session_state.model.generate(
@@ -128,6 +146,10 @@ if st.button("Generate Code") and st.session_state.model_loaded:
                     outputs[0],
                     skip_special_tokens=True
                 )
+
+                # Extract only the code after "### Output:"
+                if "### Output:" in predicted_code:
+                    predicted_code = predicted_code.split("### Output:")[1].strip()
 
                 # Fix indentation
                 fixed_code = fix_python_indentation(predicted_code)
@@ -143,7 +165,6 @@ if st.button("Generate Code") and st.session_state.model_loaded:
                     file_name="generated_code.py",
                     mime="text/x-python"
                 )
-
             except Exception as e:
                 st.error(f"Error generating code: {str(e)}")
 elif not st.session_state.model_loaded:
