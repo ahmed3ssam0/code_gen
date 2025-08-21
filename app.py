@@ -49,7 +49,7 @@ with st.sidebar:
 
     model_path = st.text_input(
         "Model Path",
-        value=r"E:\ahmed\AI\code_gen\pythonProject1\kaggle\working\codet5-finetuned\checkpoint-3141",
+        value=r"model",
         help="Path to your fine-tuned model"
     )
 
