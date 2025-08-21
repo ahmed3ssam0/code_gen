@@ -47,36 +47,21 @@ def fix_python_indentation(code):
 with st.sidebar:
     st.header("Settings")
 
-    # Fixed model path (removed text field)
-    model_path = "model"
+    model_path = st.text_input(
+        "Model Path",
+        value=r"E:\ahmed\AI\code_gen\pythonProject1\kaggle\working\codet5-finetuned\checkpoint-3141",
+        help="Path to your fine-tuned model"
+    )
 
     max_length = st.slider("Max Length", 100, 1000, 250, 50)
     num_beams = st.slider("Number of Beams", 1, 10, 5, 1)
 
-    # Auto load model
-    if not st.session_state.model_loaded:
+    if st.button("Load Model"):
         try:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             tokenizer = RobertaTokenizer.from_pretrained('Salesforce/codet5-small')
-            
-            # Load model with proper handling for meta tensors
-            model = T5ForConditionalGeneration.from_pretrained(model_path)
-            
-            # Check if model has meta tensors and needs special handling
-            has_meta_params = any(param.is_meta for param in model.parameters())
-            
-            if has_meta_params:
-                # Move model from meta device to the target device properly
-                model = model.to_empty(device=device)
-                # Reload the state dict to fill the model with actual weights
-                model.load_state_dict(
-                    torch.load(os.path.join(model_path, 'model.safetensors'), 
-                              map_location=device, 
-                              weights_only=True)
-                )
-            else:
-                model = model.to(device)
-                
+            model = T5ForConditionalGeneration.from_pretrained(model_path).to(device)
+
             st.session_state.model = model
             st.session_state.tokenizer = tokenizer
             st.session_state.device = device
@@ -131,8 +116,7 @@ if st.button("Generate Code") and st.session_state.model_loaded:
                     prompt,
                     return_tensors='pt',
                     padding=True,
-                    truncation=True,
-                    max_length=512  # Added max_length to avoid tokenization issues
+                    truncation=True
                 ).to(st.session_state.device)
 
                 outputs = st.session_state.model.generate(
@@ -146,10 +130,6 @@ if st.button("Generate Code") and st.session_state.model_loaded:
                     outputs[0],
                     skip_special_tokens=True
                 )
-
-                # Extract only the code after "### Output:"
-                if "### Output:" in predicted_code:
-                    predicted_code = predicted_code.split("### Output:")[1].strip()
 
                 # Fix indentation
                 fixed_code = fix_python_indentation(predicted_code)
@@ -165,7 +145,8 @@ if st.button("Generate Code") and st.session_state.model_loaded:
                     file_name="generated_code.py",
                     mime="text/x-python"
                 )
+
             except Exception as e:
                 st.error(f"Error generating code: {str(e)}")
 elif not st.session_state.model_loaded:
-    st.info("Please wait, model is loading...")
+    st.info("Please load the model first using the sidebar options")
