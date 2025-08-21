@@ -49,7 +49,7 @@ with st.sidebar:
 
     model_path = st.text_input(
         "Model Path",
-        value=r"model",
+        value=r"model\\",
         help="Path to your fine-tuned model"
     )
 
