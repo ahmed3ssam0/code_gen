@@ -25,20 +25,29 @@ def fix_python_indentation(code):
     for line in lines:
         stripped = line.strip()
         if not stripped:
+            fixed_lines.append("")  # keep empty lines
             continue
 
-        # Handle indentation
+        # Handle block starters
         if stripped.startswith(('def ', 'class ', 'if ', 'for ', 'while ', 'else:', 'elif ')):
             fixed_line = ('    ' * indent_level) + stripped
+            fixed_lines.append(fixed_line)
             if stripped.endswith(':'):
                 indent_level += 1
-        elif stripped.startswith(('return ', 'break', 'continue', 'pass')):
-            indent_level = max(0, indent_level - 1)
+        elif stripped.startswith(('return', 'break', 'continue', 'pass')):
             fixed_line = ('    ' * indent_level) + stripped
+            fixed_lines.append(fixed_line)
         else:
             fixed_line = ('    ' * indent_level) + stripped
+            fixed_lines.append(fixed_line)
 
-        fixed_lines.append(fixed_line)
+            # If line ends with ":" but wasn't caught above (e.g. try:, except:)
+            if stripped.endswith(':'):
+                indent_level += 1
+
+        # Adjust indent after return/break/etc.
+        if stripped in ('return', 'break', 'continue', 'pass'):
+            indent_level = max(0, indent_level - 1)
 
     return '\n'.join(fixed_lines)
 
@@ -47,7 +56,7 @@ def fix_python_indentation(code):
 with st.sidebar:
     st.header("Settings")
 
-    # Fixed model path (removed text field)
+    # Fixed model path
     model_path = "model"
 
     max_length = st.slider("Max Length", 100, 1000, 250, 50)
@@ -58,25 +67,16 @@ with st.sidebar:
         try:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             tokenizer = RobertaTokenizer.from_pretrained('Salesforce/codet5-small')
-            
-            # Load model with proper handling for meta tensors
-            model = T5ForConditionalGeneration.from_pretrained(model_path)
-            
-            # Check if model has meta tensors and needs special handling
-            has_meta_params = any(param.is_meta for param in model.parameters())
-            
-            if has_meta_params:
-                # Create a new model with empty weights on the target device
-                model = T5ForConditionalGeneration.from_pretrained(
-                    model_path, 
-                    low_cpu_mem_usage=True,
-                    device_map="auto" if device.type == "cuda" else None,
-                    torch_dtype=torch.float32
-                )
-            else:
-                # Move the regular model to the device
-                model = model.to(device)
-                
+
+            # Load model with proper handling
+            model = T5ForConditionalGeneration.from_pretrained(
+                model_path,
+                low_cpu_mem_usage=True
+            )
+
+            # Move to correct device
+            model = model.to(device)
+
             st.session_state.model = model
             st.session_state.tokenizer = tokenizer
             st.session_state.device = device
@@ -84,6 +84,7 @@ with st.sidebar:
             st.success("Model loaded successfully!")
         except Exception as e:
             st.error(f"Error loading model: {str(e)}")
+
 # Main input section
 st.header("Describe Your Code")
 
