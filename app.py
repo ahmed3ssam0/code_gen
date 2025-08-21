@@ -58,8 +58,24 @@ with st.sidebar:
         try:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             tokenizer = RobertaTokenizer.from_pretrained('Salesforce/codet5-small')
-            model = T5ForConditionalGeneration.from_pretrained(model_path).to(device)
-
+            
+            # Load model with proper handling for meta tensors
+            model = T5ForConditionalGeneration.from_pretrained(model_path)
+            
+            # Check if model has meta tensors and needs special handling
+            has_meta_params = any(param.is_meta for param in model.parameters())
+            
+            if has_meta_params:
+                # Create a new model with empty weights on the target device
+                model = T5ForConditionalGeneration.from_pretrained(
+                    model_path, 
+                    device_map="auto" if device.type == "cuda" else None,
+                    torch_dtype=torch.float32
+                )
+            else:
+                # Move the regular model to the device
+                model = model.to(device)
+                
             st.session_state.model = model
             st.session_state.tokenizer = tokenizer
             st.session_state.device = device
@@ -67,7 +83,6 @@ with st.sidebar:
             st.success("Model loaded successfully!")
         except Exception as e:
             st.error(f"Error loading model: {str(e)}")
-
 # Main input section
 st.header("Describe Your Code")
 
